@@ -11,6 +11,8 @@ import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.validation.ObjectError;
 import org.springframework.validation.ValidationUtils;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.WebDataBinder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
@@ -25,6 +27,12 @@ import java.util.Map;
 public class ValidationItemControllerV2 {
 
     private final ItemRepository itemRepository;
+    private final ItemValidator itemValidator;
+
+    @InitBinder
+    public void init(WebDataBinder dataBinder){
+        dataBinder.addValidators(itemValidator);
+    }
 
     @GetMapping
     public String items(Model model) {
@@ -120,7 +128,45 @@ public class ValidationItemControllerV2 {
         return errors.isEmpty();
     }
 
-    @PostMapping("/add")
+    //@PostMapping("/add")
+    public String addItemV3(@ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
+
+        log.info("objectName={}", bindingResult.getObjectName());
+        log.info("target={}", bindingResult.getTarget());
+
+
+        if(!StringUtils.hasText(item.getItemName())){
+            bindingResult.addError(new FieldError("item", "itemName",item.getItemName(),false,new String[]{"required.item.itemName"},null,null));
+        }
+        if(item.getPrice() == null || item.getPrice() < 1000 || item.getPrice() > 1000000){
+            bindingResult.addError(new FieldError("item", "price",item.getPrice(),false,new String[]{"range.item.price"},new Object[]{1000, 1000000}, null));
+        }
+        if(item.getQuantity() == null || item.getQuantity() > 9999){
+            bindingResult.addError(new FieldError("item", "quantity",item.getQuantity(),false,new String[]{"max.item.quantity"},new Object[]{9999}, null));
+        }
+
+        // 특정 필드가 아닌 복합 룰 검증
+        if(item.getQuantity() != null && item.getPrice() != null){
+            int resultPrice = item.getPrice() * item.getQuantity();
+            if(resultPrice < 10000){
+                bindingResult.addError(new ObjectError("item",new String[]{"totalPriceMin"},new Object[]{10000, resultPrice},null));
+            }
+        }
+
+        // 검증에 실패하면 다시 입력 폼으로
+        if(bindingResult.hasErrors()){
+            log.info("bindingResult={}", bindingResult);
+            return "validation/v2/addForm";
+        }
+
+        // 성공 로직
+        Item savedItem = itemRepository.save(item);
+        redirectAttributes.addAttribute("itemId", savedItem.getId());
+        redirectAttributes.addAttribute("status", true);
+        return "redirect:/validation/v2/items/{itemId}";
+    }
+
+    //@PostMapping("/add")
     public String addItemV4(@ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
 
         ValidationUtils.rejectIfEmptyOrWhitespace(bindingResult, "itemName", "required");
@@ -157,29 +203,28 @@ public class ValidationItemControllerV2 {
     }
 
     //@PostMapping("/add")
-    public String addItemV3(@ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
+    public String addItemV5(@ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
 
-        log.info("objectName={}", bindingResult.getObjectName());
-        log.info("target={}", bindingResult.getTarget());
+        // 검증을 한줄로 처리 -> 정확히 다른 클래스에 위임
+        itemValidator.validate(item, bindingResult);
 
-
-        if(!StringUtils.hasText(item.getItemName())){
-            bindingResult.addError(new FieldError("item", "itemName",item.getItemName(),false,new String[]{"required.item.itemName"},null,null));
-        }
-        if(item.getPrice() == null || item.getPrice() < 1000 || item.getPrice() > 1000000){
-            bindingResult.addError(new FieldError("item", "price",item.getPrice(),false,new String[]{"range.item.price"},new Object[]{1000, 1000000}, null));
-        }
-        if(item.getQuantity() == null || item.getQuantity() > 9999){
-            bindingResult.addError(new FieldError("item", "quantity",item.getQuantity(),false,new String[]{"max.item.quantity"},new Object[]{9999}, null));
+        // 검증에 실패하면 다시 입력 폼으로
+        if(bindingResult.hasErrors()){
+            log.info("bindingResult={}", bindingResult);
+            return "validation/v2/addForm";
         }
 
-        // 특정 필드가 아닌 복합 룰 검증
-        if(item.getQuantity() != null && item.getPrice() != null){
-            int resultPrice = item.getPrice() * item.getQuantity();
-            if(resultPrice < 10000){
-                bindingResult.addError(new ObjectError("item",new String[]{"totalPriceMin"},new Object[]{10000, resultPrice},null));
-            }
-        }
+        // 성공 로직
+        Item savedItem = itemRepository.save(item);
+        redirectAttributes.addAttribute("itemId", savedItem.getId());
+        redirectAttributes.addAttribute("status", true);
+        return "redirect:/validation/v2/items/{itemId}";
+    }
+
+    //@Validated 하나로 검증기를 실행해달라는 명령을 함
+    @PostMapping("/add")
+    public String addItemV6(@Validated @ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
+        // itemValidator를 실행하는 함수자체가 필요 없음
 
         // 검증에 실패하면 다시 입력 폼으로
         if(bindingResult.hasErrors()){
