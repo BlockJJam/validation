@@ -51,7 +51,14 @@ public class ValidationItemControllerV3 {
     //@Validated 하나로 검증기를 실행해달라는 명령을 함
     @PostMapping("/add")
     public String addItem(@Valid @ModelAttribute Item item, BindingResult bindingResult, RedirectAttributes redirectAttributes, Model model) {
-        // itemValidator를 실행하는 함수자체가 필요 없음
+
+        // 특정 필드가 아닌 복합 룰 검증
+        if(item.getQuantity() != null && item.getPrice() != null){
+            int resultPrice = item.getPrice() * item.getQuantity();
+            if(resultPrice < 10000){
+                bindingResult.reject("totalPriceMin", new Object[]{10000, resultPrice}, null );
+            }
+        }
 
         // 검증에 실패하면 다시 입력 폼으로
         if(bindingResult.hasErrors()){
@@ -74,7 +81,20 @@ public class ValidationItemControllerV3 {
     }
 
     @PostMapping("/{itemId}/edit")
-    public String edit(@PathVariable Long itemId, @ModelAttribute Item item) {
+    public String edit(@PathVariable Long itemId, @Valid @ModelAttribute Item item, BindingResult bindingResult) {
+        // 특정 필드가 아닌 복합 룰 검증
+        if(item.getQuantity() != null && item.getPrice() != null){
+            int resultPrice = item.getPrice() * item.getQuantity();
+            if(resultPrice < 10000){
+                bindingResult.reject("totalPriceMin", new Object[]{10000, resultPrice}, null );
+            }
+        }
+
+        if(bindingResult.hasErrors()){
+            log.info("errors= {}",bindingResult);
+            return "validation/v3/editForm";
+        }
+
         itemRepository.update(itemId, item);
         return "redirect:/validation/v3/items/{itemId}";
     }
